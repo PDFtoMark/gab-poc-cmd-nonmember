@@ -1,0 +1,93 @@
+name: Command - Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: "Command to run"
+        required: true
+      pr_num:
+        description: "PR number"
+        required: true
+      pr_branch:
+        description: "PR branch"
+        required: true
+      runner:
+        description: "Runner to use"
+        required: true
+      image:
+        description: "Image to use"
+        required: true
+      is_org_member:
+        description: "Is the user an org member"
+        required: true
+      is_pr_author:
+        description: "Is the user the PR author"
+        required: true
+      repo:
+        description: "Repository to use"
+        required: true
+      comment_id:
+        description: "Comment ID"
+        required: true
+      is_quiet:
+        description: "Quiet mode"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  cmd:
+    env:
+      CMD: ${{ github.event.inputs.cmd }}
+      PR_BRANCH: ${{ github.event.inputs.pr_branch }}
+      PR_NUM: ${{ github.event.inputs.pr_num }}
+      REPO: ${{ github.event.inputs.repo }}
+    runs-on: ${{ github.event.inputs.runner }}
+    timeout-minutes: 30
+    # same downgrade as the target workflow's cmd job
+    permissions:
+      contents: read
+      pull-requests: none
+      actions: none
+      issues: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REPO }}
+          ref: ${{ env.PR_BRANCH }}
+
+      - name: Run cmd
+        env:
+          IS_ORG_MEMBER: ${{ github.event.inputs.is_org_member }}
+          IS_PR_AUTHOR: ${{ github.event.inputs.is_pr_author }}
+          RUNNER: ${{ github.event.inputs.runner }}
+          IMAGE: ${{ github.event.inputs.image }}
+        run: |
+          echo "Running command: '${CMD}' on '${RUNNER}' runner"
+          echo "IS_ORG_MEMBER: ${IS_ORG_MEMBER}"
+
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          git config user.name "cmd[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # identical trust decision to the target workflow: non-members run the bot
+          # scripts from the upstream default branch, but against the PR checkout
+          if [ "${IS_ORG_MEMBER}" = "true" ]; then
+            BOT_PATH=.github
+          else
+            TMP_DIR=/tmp/polkadot-sdk
+            git clone --depth 1 --branch master https://github.com/paritytech/polkadot-sdk $TMP_DIR
+            BOT_PATH=$TMP_DIR/.github
+          fi
+
+          # --break-system-packages is a host-runner adaptation (the target runs inside
+          # the paritytech ci-unified image where plain pip install works)
+          python3 -m pip install --quiet --break-system-packages -r $BOT_PATH/scripts/generate-prdoc.requirements.txt
+          python3 $BOT_PATH/scripts/cmd/cmd.py $CMD
