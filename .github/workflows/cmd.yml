@@ -20,7 +20,7 @@ jobs:
       # PoC adaptation: the real workflow mints a CMD bot GitHub App token and calls
       # orgs.checkMembershipForUser. The test org has no such app, so we emulate the result
       # the real check returns for any outside user (non-member).
-      - name: Check if user is a member of the organization (emulated: non-member)
+      - name: Check if user is a member of the organization (emulated as non-member)
         id: is-member
         uses: actions/github-script@v7
         with:
